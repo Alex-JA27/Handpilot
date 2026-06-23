@@ -1,0 +1,95 @@
+"""
+hand_tracker.py
+---------------
+Thin wrapper around Google MediaPipe Hands.
+
+MediaPipe returns 21 landmarks per hand (normalised 0-1 coords).
+Key indices:
+    0        WRIST
+    1-4      THUMB       (4  = tip)
+    5-8      INDEX       (8  = tip)
+    9-12     MIDDLE      (12 = tip)
+    13-16    RING        (16 = tip)
+    17-20    PINKY       (20 = tip)
+
+Returns per frame a list of dicts:
+    {
+      "label":      "Left" | "Right",
+      "lm":         [(x_px, y_px), ...]   21 points in pixel coords
+      "lm_norm":    [(x, y), ...]         21 points in 0-1 coords
+      "fingers_up": [thumb, index, middle, ring, pinky]   1 = extended
+    }
+"""
+
+import cv2
+import mediapipe as mp
+import math
+
+
+class HandTracker:
+    TIP_IDS = [4, 8, 12, 16, 20]
+
+    def __init__(self, max_hands=1, detection_conf=0.7, tracking_conf=0.6):
+        self.mp_hands  = mp.solutions.hands
+        self.hands     = self.mp_hands.Hands(
+            static_image_mode=False,
+            max_num_hands=max_hands,
+            min_detection_confidence=detection_conf,
+            min_tracking_confidence=tracking_conf,
+        )
+        self.mp_draw   = mp.solutions.drawing_utils
+        self.mp_styles = mp.solutions.drawing_styles
+
+    def find_hands(self, frame, draw=True):
+        """Run detection on a BGR frame. Returns (frame, list_of_hand_dicts)."""
+        h, w = frame.shape[:2]
+        rgb  = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = self.hands.process(rgb)
+
+        hands_out = []
+        if results.multi_hand_landmarks:
+            for hand_lms, handedness in zip(
+                results.multi_hand_landmarks, results.multi_handedness
+            ):
+                raw_label = handedness.classification[0].label
+                # Frame is mirrored (selfie view) so flip the label
+                label = "Left" if raw_label == "Right" else "Right"
+
+                lm_px   = [(int(p.x * w), int(p.y * h)) for p in hand_lms.landmark]
+                lm_norm = [(p.x, p.y)                    for p in hand_lms.landmark]
+
+                hands_out.append({
+                    "label":      label,
+                    "lm":         lm_px,
+                    "lm_norm":    lm_norm,
+                    "fingers_up": self._fingers_up(lm_px, label),
+                })
+
+                if draw:
+                    self.mp_draw.draw_landmarks(
+                        frame,
+                        hand_lms,
+                        self.mp_hands.HAND_CONNECTIONS,
+                        self.mp_styles.get_default_hand_landmarks_style(),
+                        self.mp_styles.get_default_hand_connections_style(),
+                    )
+
+        return frame, hands_out
+
+    def _fingers_up(self, lm, label):
+        """Return [thumb, index, middle, ring, pinky] — 1 = extended."""
+        fingers = []
+        # Thumb uses X axis (direction flips per hand in mirrored view)
+        if label == "Right":
+            fingers.append(1 if lm[4][0] > lm[3][0] else 0)
+        else:
+            fingers.append(1 if lm[4][0] < lm[3][0] else 0)
+        # Other fingers: tip Y < PIP Y means extended (higher on screen)
+        for tip_id in self.TIP_IDS[1:]:
+            fingers.append(1 if lm[tip_id][1] < lm[tip_id - 2][1] else 0)
+        return fingers
+
+    @staticmethod
+    def distance(p1, p2):
+        """Euclidean pixel distance between two (x, y) tuples."""
+        return math.hypot(p1[0] - p2[0], p1[1] - p2[1])
