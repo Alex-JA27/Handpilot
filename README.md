@@ -1,6 +1,6 @@
 # HandPilot
 
-Use your hand to control your mouse and fly a drone. Built with Python and Google MediaPipe, it tracks your hand in real time and turns your gestures into actions. No controller, no keyboard — just your hand.
+Use your hand to control your mouse and fly a drone. Built with Python and Google MediaPipe, it tracks your hand in real time and turns your gestures into actions. No controller, no keyboard, just your hand.
 
 ## What It Does
 
@@ -8,6 +8,8 @@ Use your hand to control your mouse and fly a drone. Built with Python and Googl
 - Maps your index fingertip to the mouse cursor
 - Detects pinch gestures to trigger clicks
 - Designed to also control a drone — same hand, same gestures
+
+> **The drone part is still in progress.** Phase 1 (mouse control) is fully working. Phases 2, 3, and 4 are actively being built.
 
 ## Gestures
 
@@ -80,7 +82,7 @@ Edit these at the top of `mouse_control.py`:
 - [x] Pinch gestures for left and right click
 - [x] Pinky gesture for scroll
 
-### Phase 2 — Drone Camera 🔜
+### Phase 2 — Drone Camera 🚧 In Progress
 Replace the webcam with the drone's live camera. One line change:
 
 ```python
@@ -89,7 +91,11 @@ CAP_SOURCE = "udp://192.168.10.1:11111"  # DJI Tello
 CAP_SOURCE = "rtsp://192.168.1.1/stream" # custom drone
 ```
 
-### Phase 3 — Drone Flight Control 🔜
+- [ ] RTSP / UDP stream support
+- [ ] Telemetry overlay (altitude, battery, speed)
+- [ ] Auto-reconnect on signal loss
+
+### Phase 3 — Drone Flight Control 🚧 In Progress
 Map gestures to flight commands:
 
 | Gesture | Drone command |
@@ -101,10 +107,14 @@ Map gestures to flight commands:
 | Fist | Hover |
 | Two fingers up | Emergency stop |
 
-### Phase 4 — Autonomous Assist 🔜
-- Obstacle detection using the drone camera and OpenCV
-- Hand gesture overrides auto-hover
-- Return-to-home gesture
+- [ ] Build custom drone (frame, ESCs, flight controller, FPV camera)
+- [ ] MAVLink / DroneKit integration
+- [ ] Gesture-to-command mapping
+
+### Phase 4 — Autonomous Assist 🚧 In Progress
+- [ ] Obstacle detection using the drone camera and OpenCV
+- [ ] Hand gesture overrides auto-hover
+- [ ] Return-to-home gesture
 
 ## Tech Stack
 
@@ -113,6 +123,6 @@ Map gestures to flight commands:
 - [pyautogui](https://pyautogui.readthedocs.io/) — mouse control
 - [NumPy](https://numpy.org/) — coordinate mapping
 
-## License
-
-MIT
+**Planned for drone phases:**
+- [DroneKit](https://dronekit.io/) — Python drone control
+- [MAVLink](https://mavlink.io/) — drone communication protocol
