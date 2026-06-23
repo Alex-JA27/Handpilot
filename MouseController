@@ -1,0 +1,204 @@
+"""
+mouse_control.py
+----------------
+Control the system mouse with one hand using your webcam.
+Phase 2 (drone): swap CAP_SOURCE to your drone's video stream URL.
+
+GESTURES
+  Index finger up only ............. MOVE the cursor
+  Index + thumb pinch .............. RIGHT CLICK  (red line appears)
+  Index + middle up, thumb pinch ... LEFT CLICK   (green line appears)
+  Pinky up only .................... SCROLL (hand high=up, low=down)
+  Q key in the window .............. QUIT
+
+DRONE PHASE — change CAP_SOURCE at the top:
+  CAP_SOURCE = "udp://192.168.10.1:11111"   DJI Tello
+  CAP_SOURCE = "rtsp://192.168.1.1/stream"  generic RTSP drone
+
+TUNING
+  SMOOTHING      higher = smoother but laggier cursor
+  PINCH_DIST     px distance between fingertips to register a pinch
+  FRAME_MARGIN   dead-zone border (px) around the camera frame
+  CLICK_COOLDOWN frames to wait between clicks
+"""
+
+import cv2
+import numpy as np
+import pyautogui
+
+from hand_tracker import HandTracker
+
+# -----------------------------------------------------------------------------
+#  VIDEO SOURCE
+#  0            = built-in webcam  (current phase)
+#  "udp://..."  = drone camera     (drone phase — change this one line)
+# -----------------------------------------------------------------------------
+CAP_SOURCE = 0
+
+# pyautogui safety
+pyautogui.FAILSAFE = False
+pyautogui.PAUSE    = 0
+
+# Screen and camera
+SCREEN_W, SCREEN_H = pyautogui.size()
+CAM_W,    CAM_H    = 1280, 720
+
+# Tuning constants
+FRAME_MARGIN   = 150
+SMOOTHING      = 6
+PINCH_DIST     = 45
+CLICK_COOLDOWN = 18
+
+
+def map_to_screen(px, py):
+    """Map a camera pixel inside the active box to full screen coordinates."""
+    sx = np.interp(px, (FRAME_MARGIN, CAM_W - FRAME_MARGIN), (0, SCREEN_W))
+    sy = np.interp(py, (FRAME_MARGIN, CAM_H - FRAME_MARGIN), (0, SCREEN_H))
+    return sx, sy
+
+
+def smooth(prev, new, factor):
+    """Exponential smoothing — nudges prev toward new by 1/factor per frame."""
+    return prev + (new - prev) / max(factor, 1)
+
+
+def draw_pinch_line(frame, p1, p2, colour, dist, threshold):
+    """Draw a line between two fingertips; thickens when close to threshold."""
+    thickness = 3 if dist < threshold else 1
+    cv2.line(frame, p1, p2, colour, thickness)
+    mid = ((p1[0] + p2[0]) // 2, (p1[1] + p2[1]) // 2)
+    cv2.putText(frame, f"{int(dist)}px", (mid[0] + 8, mid[1] - 8),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.45, colour, 1)
+
+
+def main():
+    cap = cv2.VideoCapture(CAP_SOURCE)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH,  CAM_W)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAM_H)
+
+    if not cap.isOpened():
+        print("ERROR: could not open video source:", CAP_SOURCE)
+        print("  Webcam  -> System Settings -> Privacy & Security -> Camera")
+        print("  Drone   -> make sure drone is on and Mac is on its Wi-Fi")
+        return
+
+    tracker     = HandTracker(max_hands=1)
+    cx, cy      = SCREEN_W / 2, SCREEN_H / 2
+    click_timer = 0
+
+    source_label = "WEBCAM" if CAP_SOURCE == 0 else "DRONE CAM"
+    print(f"Source: {source_label}")
+    print("index=move | index+thumb=RIGHT click | index+mid+thumb=LEFT click | pinky=scroll | q=quit")
+
+    while True:
+        ok, frame = cap.read()
+        if not ok:
+            print("WARNING: lost frame, retrying...")
+            cap.open(CAP_SOURCE)
+            continue
+
+        frame = cv2.flip(frame, 1)
+        frame, hands = tracker.find_hands(frame)
+
+        # Draw active mapping box
+        cv2.rectangle(
+            frame,
+            (FRAME_MARGIN, FRAME_MARGIN),
+            (CAM_W - FRAME_MARGIN, CAM_H - FRAME_MARGIN),
+            (255, 0, 255), 2,
+        )
+
+        # Source badge top-right
+        badge_colour = (0, 200, 255) if CAP_SOURCE == 0 else (0, 255, 80)
+        cv2.putText(frame, f"[ {source_label} ]",
+                    (CAM_W - 220, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.7, badge_colour, 2)
+
+        if click_timer > 0:
+            click_timer -= 1
+
+        action_label = ""
+
+        if hands:
+            hand    = hands[0]
+            lm      = hand["lm"]
+            fingers = hand["fingers_up"]
+
+            thumb_tip  = lm[4]
+            index_tip  = lm[8]
+            middle_tip = lm[12]
+            pinky_tip  = lm[20]
+
+            thumb_up  = fingers[0] == 1
+            index_up  = fingers[1] == 1
+            middle_up = fingers[2] == 1
+            pinky_up  = fingers[4] == 1
+
+            d_index_thumb  = HandTracker.distance(index_tip,  thumb_tip)
+            d_middle_thumb = HandTracker.distance(middle_tip, thumb_tip)
+
+            # SCROLL: pinky up only
+            if pinky_up and not index_up and not middle_up:
+                direction    = 1 if pinky_tip[1] < CAM_H // 2 else -1
+                action_label = "SCROLL " + ("UP" if direction > 0 else "DOWN")
+                pyautogui.scroll(direction * 5)
+
+            # MOVE: index up only
+            elif index_up and not middle_up and not pinky_up:
+                sx, sy = map_to_screen(index_tip[0], index_tip[1])
+                cx = smooth(cx, sx, SMOOTHING)
+                cy = smooth(cy, sy, SMOOTHING)
+                pyautogui.moveTo(cx, cy)
+                action_label = "MOVE"
+                cv2.circle(frame, index_tip, 12, (255, 0, 255), cv2.FILLED)
+
+                # RIGHT CLICK: index + thumb pinch
+                if thumb_up:
+                    draw_pinch_line(frame, index_tip, thumb_tip,
+                                    (0, 60, 255), d_index_thumb, PINCH_DIST)
+                    if d_index_thumb < PINCH_DIST and click_timer == 0:
+                        pyautogui.click(button="right")
+                        cv2.circle(frame, thumb_tip, 16, (0, 60, 255), cv2.FILLED)
+                        action_label = "RIGHT CLICK"
+                        click_timer  = CLICK_COOLDOWN
+
+            # LEFT CLICK: index + middle up, thumb pinches toward middle
+            elif index_up and middle_up and not pinky_up:
+                sx, sy = map_to_screen(index_tip[0], index_tip[1])
+                cx = smooth(cx, sx, SMOOTHING)
+                cy = smooth(cy, sy, SMOOTHING)
+                pyautogui.moveTo(cx, cy)
+                action_label = "MOVE (left-click ready)"
+
+                if thumb_up:
+                    draw_pinch_line(frame, middle_tip, thumb_tip,
+                                    (0, 255, 0), d_middle_thumb, PINCH_DIST)
+                    if d_middle_thumb < PINCH_DIST and click_timer == 0:
+                        pyautogui.click()
+                        cv2.circle(frame, middle_tip, 16, (0, 255, 0), cv2.FILLED)
+                        action_label = "LEFT CLICK"
+                        click_timer  = CLICK_COOLDOWN
+
+        # HUD
+        cv2.putText(frame,
+            "index=move | index+thumb=RIGHT | mid+thumb=LEFT | pinky=scroll | q=quit",
+            (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (255, 255, 255), 1)
+
+        if action_label:
+            colour = (0, 255, 0)   if "LEFT"   in action_label else \
+                     (0, 60, 255)  if "RIGHT"  in action_label else \
+                     (0, 255, 255) if "SCROLL" in action_label else \
+                     (255, 0, 255)
+            cv2.putText(frame, action_label, (20, 85),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.1, colour, 2)
+
+        cv2.imshow("HandMouse", frame)
+        if cv2.waitKey(1) & 0xFF == ord("q"):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+    print("Bye!")
+
+
+if __name__ == "__main__":
+    main()
