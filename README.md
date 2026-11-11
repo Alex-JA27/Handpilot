@@ -1,15 +1,17 @@
-# HandPilot
+# HandPilot 🖐️
 
-Use your hand to control your mouse and fly a drone. Built with Python and Google MediaPipe, it tracks your hand in real time and turns your gestures into actions. No controller, no keyboard, just your hand.
+Control your mouse using just your hand gestures. Built with Python, Google MediaPipe, and OpenCV, HandPilot tracks your hand in real time and translates finger movements into mouse actions.
+
+No physical mouse needed — just your webcam and your hand.
 
 ## What It Does
 
-- Tracks 21 points on your hand using your camera
+- Tracks 21 hand landmarks in real time using your webcam
 - Maps your index fingertip to the mouse cursor
-- Detects pinch gestures to trigger clicks
-- Designed to also control a drone — same hand, same gestures
-
-> **The drone part is still in progress.** Phase 1 (mouse control) is fully working. Phases 2, 3, and 4 are actively being built.
+- Detects pinch gestures to trigger left and right clicks
+- Enables hands-free scrolling using pinky gestures
+- Applies motion smoothing for stable cursor movement
+- Uses click cooldowns to prevent accidental repeated clicks
 
 ## Gestures
 
@@ -23,106 +25,132 @@ Use your hand to control your mouse and fly a drone. Built with Python and Googl
 
 ## How It Works
 
-Google MediaPipe detects 21 landmarks on your hand every frame.
+HandPilot uses Google MediaPipe to detect and track 21 landmarks on your hand every frame.
 
+### Key Hand Landmarks
+
+```text
+4  ← Thumb tip
+8  ← Index fingertip (controls cursor)
+12 ← Middle fingertip
+20 ← Pinky fingertip
+0  ← Wrist
 ```
-4  ← thumb tip
-8  ← index tip  (drives the cursor)
-12 ← middle tip
-20 ← pinky tip
-0  ← wrist
+
+### Processing Pipeline
+
+1. Webcam captures live video input
+2. MediaPipe detects 21 hand landmarks
+3. Gesture recognition identifies finger positions
+4. Index fingertip coordinates map to screen coordinates
+5. Motion smoothing reduces cursor jitter
+6. PyAutoGUI executes the corresponding mouse action
+
+## Project Structure
+
+```text
+HandPilot/
+├── mouse_control.py    # Main application
+├── hand_tracker.py     # MediaPipe wrapper and gesture logic
+├── requirements.txt    # Python dependencies
+└── README.md           # Project documentation
 ```
 
-Each frame:
-1. Camera captures your hand
-2. MediaPipe returns 21 landmarks
-3. Code checks which fingers are up
-4. Index tip maps to screen coordinates
-5. Smoothing removes jitter
-6. Mouse event fires
+## Installation & Setup
 
-## Files
-
-- `mouse_control.py` — run this
-- `hand_tracker.py` — MediaPipe wrapper and gesture logic
-- `requirements.txt` — dependencies
-
-## Setup
+### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/handpilot.git
-cd handpilot
+git clone https://github.com/Alex-JA27/Handpilot.git
+cd Handpilot
+```
 
+### 2. Create a Virtual Environment
+
+**macOS / Linux:**
+
+```bash
 python3 -m venv .venv
-source .venv/bin/activate      # macOS / Linux
-.venv\Scripts\activate         # Windows
+source .venv/bin/activate
+```
 
+**Windows:**
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+```
+
+### 3. Install Dependencies
+
+```bash
 pip install -r requirements.txt
+```
+
+### 4. Run HandPilot
+
+```bash
 python mouse_control.py
 ```
 
-macOS only: System Settings → Privacy & Security → Accessibility → add Terminal → toggle ON.
+### macOS Accessibility Permissions
 
-## Tuning
+On macOS, PyAutoGUI requires Accessibility permissions to control the mouse.
 
-Edit these at the top of `mouse_control.py`:
+1. Open System Settings
+2. Navigate to Privacy & Security
+3. Select Accessibility
+4. Add Terminal (or your Python IDE)
+5. Enable Accessibility permissions
 
-| Constant | Default | Effect |
+## Configuration & Tuning
+
+You can adjust the following constants at the top of `mouse_control.py` to customize performance.
+
+| Constant | Default | Description |
 |---|---|---|
-| `SMOOTHING` | `6` | Higher = smoother but laggier |
-| `PINCH_DIST` | `45` | How close fingers must be to click (px) |
-| `FRAME_MARGIN` | `150` | Dead-zone border around camera frame |
-| `CLICK_COOLDOWN` | `18` | Frames between allowed clicks |
+| `SMOOTHING` | `6` | Higher values produce smoother but slower cursor movement |
+| `PINCH_DIST` | `45` | Maximum fingertip distance required to register a click (px) |
+| `FRAME_MARGIN` | `150` | Camera frame margin used for coordinate mapping |
+| `CLICK_COOLDOWN` | `18` | Minimum number of frames between clicks |
 
-## Roadmap
+## Technologies Used
 
-### Phase 1 — Hand Mouse ✅
-- [x] Hand skeleton tracking via MediaPipe
-- [x] Index fingertip controls the cursor
-- [x] Pinch gestures for left and right click
-- [x] Pinky gesture for scroll
-
-### Phase 2 — Drone Camera 🚧 In Progress
-Replace the webcam with the drone's live camera. One line change:
-
-```python
-CAP_SOURCE = 0                           # webcam (now)
-CAP_SOURCE = "udp://192.168.10.1:11111"  # DJI Tello
-CAP_SOURCE = "rtsp://192.168.1.1/stream" # custom drone
-```
-
-- [ ] RTSP / UDP stream support
-- [ ] Telemetry overlay (altitude, battery, speed)
-- [ ] Auto-reconnect on signal loss
-
-### Phase 3 — Drone Flight Control 🚧 In Progress
-Map gestures to flight commands:
-
-| Gesture | Drone command |
+| Technology | Purpose |
 |---|---|
-| Open palm, move up | Throttle up |
-| Open palm, move down | Throttle down |
-| Tilt hand left / right | Roll |
-| Tilt hand forward / back | Pitch |
-| Fist | Hover |
-| Two fingers up | Emergency stop |
+| Python | Core application and gesture processing |
+| MediaPipe | Real-time hand landmark detection |
+| OpenCV | Webcam capture and visual feedback |
+| PyAutoGUI | Mouse movement, clicking, and scrolling |
+| NumPy | Coordinate mapping and numerical processing |
 
-- [ ] Build custom drone (frame, ESCs, flight controller, FPV camera)
-- [ ] MAVLink / DroneKit integration
-- [ ] Gesture-to-command mapping
+## Features
 
-### Phase 4 — Autonomous Assist 🚧 In Progress
-- [ ] Obstacle detection using the drone camera and OpenCV
-- [ ] Hand gesture overrides auto-hover
-- [ ] Return-to-home gesture
+- [x] Real-time hand detection and tracking
+- [x] 21-point hand landmark detection
+- [x] Index fingertip cursor control
+- [x] Left-click gesture recognition
+- [x] Right-click gesture recognition
+- [x] Gesture-based scrolling
+- [x] Cursor motion smoothing
+- [x] Click cooldown management
 
-## Tech Stack
+## Future Improvements
 
-- [MediaPipe](https://developers.google.com/mediapipe) — hand tracking
-- [OpenCV](https://opencv.org/) — camera and visual overlay
-- [pyautogui](https://pyautogui.readthedocs.io/) — mouse control
-- [NumPy](https://numpy.org/) — coordinate mapping
+- [ ] Customizable hand gesture mappings
+- [ ] Adjustable sensitivity through a user interface
+- [ ] Additional gestures for keyboard shortcuts
+- [ ] Improved gesture recognition under varying lighting conditions
+- [ ] Multi-hand gesture support
 
-**Planned for drone phases:**
-- [DroneKit](https://dronekit.io/) — Python drone control
-- [MAVLink](https://mavlink.io/) — drone communication protocol
+## Project Goal
+
+HandPilot explores how computer vision and gesture recognition can create more intuitive ways for humans to interact with computers.
+
+By combining real-time hand tracking, coordinate mapping, and gesture classification, the project demonstrates how natural hand movements can replace traditional mouse inputs.
+
+## Author
+
+**Alex Alvarado**
+
+[GitHub](https://github.com/Alex-JA27)
